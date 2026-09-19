@@ -8,9 +8,10 @@ on:
   workflow_dispatch: {}
     # Hiermee kun je de workflow ook handmatig starten via de "Actions"-tab
     # op GitHub, handig om te testen zonder 20 minuten te wachten.
-  concurrency:
-    group: check-new-tweets
-    cancel-in-progress: false
+
+concurrency:
+  group: check-new-tweets
+  cancel-in-progress: false
 
 permissions:
   contents: write
