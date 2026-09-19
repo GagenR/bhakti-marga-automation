@@ -1,0 +1,44 @@
+name: Check nieuwe Guruji tweets en stuur naar Instapaper
+
+on:
+  schedule:
+    # Elke 20 minuten. LET OP: GitHub kan dit bij drukte een paar minuten
+    # vertragen, dat is normaal en geen probleem voor dit doel.
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}
+    # Hiermee kun je de workflow ook handmatig starten via de "Actions"-tab
+    # op GitHub, handig om te testen zonder 20 minuten te wachten.
+
+permissions:
+  contents: write
+  # Nodig zodat de workflow het bijgewerkte seen_ids.json bestand
+  # terug kan commiten naar de repo.
+
+jobs:
+  check-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo uitchecken
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Script draaien
+        env:
+          INSTAPAPER_USERNAME: ${{ secrets.INSTAPAPER_USERNAME }}
+          INSTAPAPER_PASSWORD: ${{ secrets.INSTAPAPER_PASSWORD }}
+        run: python scripts/telegram_to_instapaper.py
+
+      - name: Bijgewerkte seen_ids.json terug committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/seen_ids.json
+          git diff --staged --quiet || git commit -m "Update seen_ids.json [skip ci]"
+          git push
