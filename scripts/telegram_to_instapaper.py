@@ -75,7 +75,7 @@ def fetch_messages() -> list[dict]:
 
         messages.append({
             "post_id": post_id,
-            "url": f"https://t.me/{post_id}",
+            "url": f"https://t.s/{post_id}",
             "text": text,
         })
 
