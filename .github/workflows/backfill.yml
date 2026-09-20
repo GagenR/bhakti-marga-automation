@@ -1,0 +1,43 @@
+name: Eenmalige backfill (tweets vanaf 1 januari 2026)
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: check-new-tweets
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo uitchecken
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Backfill draaien
+        env:
+          INSTAPAPER_USERNAME: ${{ secrets.INSTAPAPER_USERNAME }}
+          INSTAPAPER_PASSWORD: ${{ secrets.INSTAPAPER_PASSWORD }}
+          PAGES_BASE_URL: https://gagenr.github.io/bhakti-marga-automation
+        run: python scripts/backfill.py
+
+      - name: Wijzigingen terug committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p docs/tweets
+          git add state/seen_ids.json docs/tweets/
+          git diff --staged --quiet || git commit -m "Backfill: oudere tweets toegevoegd [skip ci]"
+          git pull --rebase origin main
+          git push

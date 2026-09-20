@@ -6,19 +6,7 @@ die er zijn), publiceert die via GitHub Pages, en stuurt die schone link
 door naar Instapaper -- zodat op de Kobo alleen de tweet zelf te zien is,
 niet Telegram's eigen rommelige "Download / Context / View in Channel"-pagina.
 
-Werking:
-1. Haalt de publieke preview-pagina op: https://t.me/s/<KANAAL>
-2. Parseert alle berichten: tekst (opgeschoond), eventuele foto's (ook bij
-   albums met meerdere foto's), en unieke post-ID (bv. "Guruji108Tweets/1448")
-3. Vergelijkt met seen_ids.json (bijgehouden in de repo) om te weten wat al
-   verwerkt is
-4. Voor elk nieuw bericht:
-   a. Genereert een eigen HTML-pagina onder docs/tweets/<id>.html
-   b. Stuurt de bijbehorende GitHub Pages-URL naar Instapaper
-5. Schrijft seen_ids.json bij, zodat de volgende run niet dubbel stuurt
-
-Benodigde environment variables (worden in GitHub Actions als secrets
-aangeleverd):
+Benodigde environment variables:
 - INSTAPAPER_USERNAME
 - INSTAPAPER_PASSWORD
 - PAGES_BASE_URL (bv. "https://gagenr.github.io/bhakti-marga-automation")
@@ -183,10 +171,6 @@ def clean_tweet_text(text: str) -> str:
 
 
 def extract_photo_urls(msg_div) -> list[str]:
-    """Een los bericht met één foto gebruikt de class
-    '.tgme_widget_message_photo_wrap'. Een album (meerdere foto's in één
-    bericht) gebruikt meerdere '.tgme_widget_message_grouped_photo'-elementen.
-    Geeft alle gevonden foto-URL's terug, in volgorde."""
     urls = []
 
     single = msg_div.select_one(".tgme_widget_message_photo_wrap")
@@ -206,13 +190,7 @@ def extract_photo_urls(msg_div) -> list[str]:
     return urls
 
 
-def fetch_messages() -> list[dict]:
-    resp = requests.get(PREVIEW_URL, timeout=30, headers={
-        "User-Agent": "Mozilla/5.0 (compatible; GurujiTweetsBot/1.0)"
-    })
-    resp.raise_for_status()
-
-    soup = BeautifulSoup(resp.text, "html.parser")
+def parse_messages_from_soup(soup: BeautifulSoup) -> list[dict]:
     messages = []
 
     for msg_div in soup.select("div.tgme_widget_message"):
@@ -238,6 +216,15 @@ def fetch_messages() -> list[dict]:
         })
 
     return messages
+
+
+def fetch_messages(url: str = PREVIEW_URL) -> list[dict]:
+    resp = requests.get(url, timeout=30, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; GurujiTweetsBot/1.0)"
+    })
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return parse_messages_from_soup(soup)
 
 
 def message_number(post_id: str) -> str:
