@@ -37,6 +37,7 @@ jobs:
         env:
           INSTAPAPER_USERNAME: ${{ secrets.INSTAPAPER_USERNAME }}
           INSTAPAPER_PASSWORD: ${{ secrets.INSTAPAPER_PASSWORD }}
+          PAGES_BASE_URL: https://gagenr.github.io/bhakti-marga-automation
         run: python scripts/telegram_to_instapaper.py
 
       - name: Bijgewerkte seen_ids.json terug committen
