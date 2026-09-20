@@ -6,6 +6,15 @@ verschijnen zodra die wifi heeft — waar dan ook, niet gebonden aan één netwe
 
 ## Eenmalige setup
 
+0. **GitHub Pages inschakelen**
+   Ga naar je repo → **Settings → Pages** → bij "Source" kies **"Deploy from
+   a branch"** → bij "Branch" kies **`main`** en map **`/docs`** → **Save**.
+   GitHub toont je dan de uiteindelijke URL, iets als
+   `https://GEBRUIKERSNAAM.github.io/bhakti-marga-automation`.
+   Zet die exacte URL in `.github/workflows/check-new-tweets.yml` bij de
+   regel `PAGES_BASE_URL: ...` (vervang `gagenr` door jouw eigen
+   GitHub-gebruikersnaam als dat nog niet klopt).
+
 1. **Nieuwe GitHub-repo aanmaken**
    Maak op github.com een nieuwe (private mag) repo aan, bijv.
    `guruji-tweets-to-kobo`, en upload alle bestanden uit deze map ernaartoe
@@ -19,8 +28,8 @@ verschijnen zodra die wifi heeft — waar dan ook, niet gebonden aan één netwe
 3. **GitHub Secrets instellen**
    Ga in de repo naar **Settings → Secrets and variables → Actions → New
    repository secret** en voeg twee secrets toe:
-   - `INSTAPAPER_USERNAME` — haar Instapaper e-mailadres
-   - `INSTAPAPER_PASSWORD` — haar Instapaper-wachtwoord
+    - `INSTAPAPER_USERNAME` — haar Instapaper e-mailadres
+    - `INSTAPAPER_PASSWORD` — haar Instapaper-wachtwoord
 
    Deze staan dan veilig versleuteld opgeslagen en zijn nergens in de code
    zichtbaar.
