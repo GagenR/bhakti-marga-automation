@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
 Leest het publieke Telegram-kanaal Guruji108Tweets uit, genereert voor elk
-nieuw bericht een eigen nette, leesbare HTML-pagina (inclusief foto, als die
-er is), publiceert die via GitHub Pages, en stuurt die schone link door naar
-Instapaper -- zodat op de Kobo alleen de tweet zelf te zien is, niet Telegram's
-eigen rommelige "Download / Context / View in Channel"-pagina.
+nieuw bericht een eigen nette, leesbare HTML-pagina (inclusief foto's, als
+die er zijn), publiceert die via GitHub Pages, en stuurt die schone link
+door naar Instapaper -- zodat op de Kobo alleen de tweet zelf te zien is,
+niet Telegram's eigen rommelige "Download / Context / View in Channel"-pagina.
 
 Werking:
 1. Haalt de publieke preview-pagina op: https://t.me/s/<KANAAL>
-2. Parseert alle berichten: tekst, eventuele foto, en unieke post-ID
-   (bv. "Guruji108Tweets/1448")
+2. Parseert alle berichten: tekst (opgeschoond), eventuele foto's (ook bij
+   albums met meerdere foto's), en unieke post-ID (bv. "Guruji108Tweets/1448")
 3. Vergelijkt met seen_ids.json (bijgehouden in de repo) om te weten wat al
    verwerkt is
 4. Voor elk nieuw bericht:
@@ -36,9 +36,6 @@ from zoneinfo import ZoneInfo
 import requests
 from bs4 import BeautifulSoup
 
-# Telegram geeft tijden in UTC; we tonen ze in Nederlandse tijd, zodat de
-# datum/tijd in de titel overeenkomt met wanneer Guruji 'm daadwerkelijk
-# (lokaal gezien) postte.
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 CHANNEL = "Guruji108Tweets"
@@ -164,38 +161,52 @@ def save_seen_ids(seen_ids: set[str]) -> None:
 
 
 def extract_timestamp(msg_div) -> datetime | None:
-    """Telegram zet de exacte posttijd in een <time datetime="..."> element
-    binnen de datum-link van elk bericht. Geeft een timezone-aware datetime
-    terug in Nederlandse tijd, of None als het niet te vinden is."""
     time_tag = msg_div.select_one(".tgme_widget_message_date time")
     if not time_tag or not time_tag.get("datetime"):
         return None
-
     raw = time_tag["datetime"]
     try:
         dt_utc = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
-
     return dt_utc.astimezone(LOCAL_TZ)
 
 
-def extract_photo_url(msg_div) -> str | None:
-    """Telegram's preview-pagina zet foto's als achtergrond-afbeelding in een
-    <a class="tgme_widget_message_photo_wrap" style="background-image:url('...')">.
-    Deze functie pakt die URL eruit, als die er is."""
-    photo_wrap = msg_div.select_one(".tgme_widget_message_photo_wrap")
-    if not photo_wrap:
-        return None
+def clean_tweet_text(text: str) -> str:
+    text = re.sub(r"^.+\n@\S+\n+", "", text)
+    text = re.sub(
+        r"\n+\d{1,2}:\d{2}\s?[AP]M\s*·\s*[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}\s*$",
+        "",
+        text,
+    )
+    return text.strip()
 
-    style = photo_wrap.get("style", "")
-    match = re.search(r"background-image:\s*url\(['\"]?(.*?)['\"]?\)", style)
-    return match.group(1) if match else None
+
+def extract_photo_urls(msg_div) -> list[str]:
+    """Een los bericht met één foto gebruikt de class
+    '.tgme_widget_message_photo_wrap'. Een album (meerdere foto's in één
+    bericht) gebruikt meerdere '.tgme_widget_message_grouped_photo'-elementen.
+    Geeft alle gevonden foto-URL's terug, in volgorde."""
+    urls = []
+
+    single = msg_div.select_one(".tgme_widget_message_photo_wrap")
+    if single:
+        style = single.get("style", "")
+        match = re.search(r"background-image:\s*url\(['\"]?(.*?)['\"]?\)", style)
+        if match:
+            urls.append(match.group(1))
+        return urls
+
+    for grouped in msg_div.select(".tgme_widget_message_grouped_photo"):
+        style = grouped.get("style", "")
+        match = re.search(r"background-image:\s*url\(['\"]?(.*?)['\"]?\)", style)
+        if match:
+            urls.append(match.group(1))
+
+    return urls
 
 
 def fetch_messages() -> list[dict]:
-    """Haalt de publieke Telegram-preview op en geeft een lijst berichten terug,
-    elk als dict met 'post_id', 'source_url', 'text' en 'photo_url' (of None)."""
     resp = requests.get(PREVIEW_URL, timeout=30, headers={
         "User-Agent": "Mozilla/5.0 (compatible; GurujiTweetsBot/1.0)"
     })
@@ -211,20 +222,18 @@ def fetch_messages() -> list[dict]:
 
         text_div = msg_div.select_one(".tgme_widget_message_text")
         text = text_div.get_text(separator="\n").strip() if text_div else ""
-        photo_url = extract_photo_url(msg_div)
+        text = clean_tweet_text(text)
+        photo_urls = extract_photo_urls(msg_div)
         posted_at = extract_timestamp(msg_div)
 
-        # Sommige berichten zijn puur een foto zonder onderschrift -- geef
-        # die dan een simpele placeholder-titel/tekst zodat de pagina niet
-        # helemaal leeg oogt.
-        if not text and photo_url:
-            text = "(Foto van Guruji)"
+        if not text and photo_urls:
+            text = "(Foto van Guruji)" if len(photo_urls) == 1 else "(Foto's van Guruji)"
 
         messages.append({
             "post_id": post_id,
             "source_url": f"https://t.me/s/{post_id}",
             "text": text,
-            "photo_url": photo_url,
+            "photo_urls": photo_urls,
             "posted_at": posted_at,
         })
 
@@ -232,12 +241,10 @@ def fetch_messages() -> list[dict]:
 
 
 def message_number(post_id: str) -> str:
-    """'Guruji108Tweets/1448' -> '1448' -- gebruikt als bestandsnaam."""
     return post_id.rsplit("/", 1)[-1]
 
 
 def format_datetime_nl(dt: datetime) -> str:
-    """bv. 'zaterdag 20 september 2026, 14:32'"""
     dagen = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"]
     maanden = ["januari", "februari", "maart", "april", "mei", "juni", "juli",
                "augustus", "september", "oktober", "november", "december"]
@@ -247,13 +254,11 @@ def format_datetime_nl(dt: datetime) -> str:
 
 
 def generate_page(msg: dict) -> Path:
-    """Genereert de HTML-pagina voor één bericht en schrijft die weg onder
-    docs/tweets/<id>.html. Geeft het pad terug."""
     PAGES_DIR.mkdir(parents=True, exist_ok=True)
 
     photo_html = ""
-    if msg["photo_url"]:
-        photo_html = f'  <img class="tweet-photo" src="{html.escape(msg["photo_url"])}" alt="">\n'
+    for url in msg["photo_urls"]:
+        photo_html += f'  <img class="tweet-photo" src="{html.escape(url)}" alt="">\n'
 
     posted_at_html = format_datetime_nl(msg["posted_at"]) if msg["posted_at"] else ""
 
@@ -270,10 +275,6 @@ def generate_page(msg: dict) -> Path:
 
 
 def build_title(msg: dict) -> str:
-    """Bouwt de titel die in Instapaper/op de Kobo getoond wordt. Begint met
-    datum + tijd (JJJJ-MM-DD HH:MM) zodat items chronologisch sorteren en in
-    één oogopslag te zien is wat de nieuwste tweet is, gevolgd door de eerste
-    regel van de tweet zelf."""
     first_line = (msg["text"].splitlines()[0] if msg["text"] else "Guruji tweet") or "Guruji tweet"
     if msg["posted_at"]:
         date_prefix = msg["posted_at"].strftime("%Y-%m-%d %H:%M")
@@ -282,7 +283,6 @@ def build_title(msg: dict) -> str:
 
 
 def add_to_instapaper(username: str, password: str, url: str, title: str) -> None:
-    """Stuurt één URL naar Instapaper via de Simple API."""
     resp = requests.post(
         INSTAPAPER_ADD_URL,
         auth=(username, password),
