@@ -2,12 +2,8 @@ name: Check nieuwe Guruji tweets en stuur naar Instapaper
 
 on:
   schedule:
-    # Elke 20 minuten. LET OP: GitHub kan dit bij drukte een paar minuten
-    # vertragen, dat is normaal en geen probleem voor dit doel.
     - cron: "*/20 * * * *"
   workflow_dispatch: {}
-    # Hiermee kun je de workflow ook handmatig starten via de "Actions"-tab
-    # op GitHub, handig om te testen zonder 20 minuten te wachten.
 
 concurrency:
   group: check-new-tweets
@@ -15,8 +11,6 @@ concurrency:
 
 permissions:
   contents: write
-  # Nodig zodat de workflow het bijgewerkte seen_ids.json bestand
-  # terug kan commiten naar de repo.
 
 jobs:
   check-and-send:
@@ -33,6 +27,11 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
+      - name: Debug env
+        env:
+          PAGES_BASE_URL: https://gagenr.github.io/bhakti-marga-automation
+        run: echo "PAGES_BASE_URL is $PAGES_BASE_URL"
+
       - name: Script draaien
         env:
           INSTAPAPER_USERNAME: ${{ secrets.INSTAPAPER_USERNAME }}
@@ -40,11 +39,11 @@ jobs:
           PAGES_BASE_URL: https://gagenr.github.io/bhakti-marga-automation
         run: python scripts/telegram_to_instapaper.py
 
-      - name: Bijgewerkte seen_ids.json terug committen
+      - name: Wijzigingen terug committen
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add state/seen_ids.json
-          git diff --staged --quiet || git commit -m "Update seen_ids.json [skip ci]"
+          git add state/seen_ids.json docs/tweets/
+          git diff --staged --quiet || git commit -m "Update"
           git pull --rebase origin main
           git push
